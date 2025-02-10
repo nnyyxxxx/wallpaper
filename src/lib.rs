@@ -2,6 +2,7 @@ pub mod core {
     pub mod app;
     pub mod backend;
     pub mod buffer;
+    pub mod cache;
     pub mod daemon;
     pub mod ipc;
     pub mod pool;

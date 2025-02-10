@@ -1,5 +1,10 @@
 use crate::{
-    core::{backend::LayerSurface, buffer::Buffer, pool::BumpPool},
+    core::{
+        backend::LayerSurface,
+        buffer::Buffer,
+        cache::{Cache, CacheKey},
+        pool::BumpPool,
+    },
     display::monitor::Monitor,
     image::loader::ImageLoader,
     utils::{
@@ -18,6 +23,7 @@ pub struct App {
     connection: Option<Connection>,
     surfaces: Vec<LayerSurface>,
     event_queue: Option<EventQueue<WaylandState>>,
+    cache: Cache,
 }
 
 impl App {
@@ -29,6 +35,7 @@ impl App {
             connection: None,
             surfaces: Vec::new(),
             event_queue: None,
+            cache: Cache::new(),
         };
         app.init_wayland()?;
         Ok(app)
@@ -78,11 +85,22 @@ impl App {
             .monitors
             .iter()
             .map(|monitor| {
+                let cache_key = CacheKey::new(
+                    &path,
+                    monitor.width.try_into().unwrap(),
+                    monitor.height.try_into().unwrap(),
+                );
+                if let Some(cached_buffer) = self.cache.get(&cache_key) {
+                    return Ok(cached_buffer.clone());
+                }
+
                 let scaled = ImageLoader::load_and_scale(&path, monitor.width, monitor.height)?;
                 let mut pool = BumpPool::new(monitor.width, monitor.height)?;
                 let rgba = scaled.to_rgba8();
                 pool.write_pixels(rgba.as_raw());
-                Ok::<Buffer, WallpaperError>(pool.get_buffer(state.get_shm(), qh).clone())
+                let buffer = pool.get_buffer(state.get_shm(), qh).clone();
+                self.cache.insert(cache_key, buffer.clone());
+                Ok::<Buffer, WallpaperError>(buffer)
             })
             .collect::<Result<_, _>>()?;
 
@@ -184,7 +202,7 @@ impl App {
         Ok(())
     }
 
-    pub fn set_wallpaper_and_run(&mut self, path: &str) -> WallpaperResult<()> {
+    pub fn set_wallpaper_and_exit(&mut self, path: &str) -> WallpaperResult<()> {
         info!("Setting wallpaper: {}", path);
 
         let mut event_queue = self
@@ -204,11 +222,22 @@ impl App {
             .monitors
             .iter()
             .map(|monitor| {
+                let cache_key = CacheKey::new(
+                    path,
+                    monitor.width.try_into().unwrap(),
+                    monitor.height.try_into().unwrap(),
+                );
+                if let Some(cached_buffer) = self.cache.get(&cache_key) {
+                    return Ok(cached_buffer.clone());
+                }
+
                 let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
                 let mut pool = BumpPool::new(monitor.width, monitor.height)?;
                 let rgba = scaled.to_rgba8();
                 pool.write_pixels(rgba.as_raw());
-                Ok::<Buffer, WallpaperError>(pool.get_buffer(state.get_shm(), &qh).clone())
+                let buffer = pool.get_buffer(state.get_shm(), &qh).clone();
+                self.cache.insert(cache_key, buffer.clone());
+                Ok::<Buffer, WallpaperError>(buffer)
             })
             .collect::<Result<_, _>>()?;
 
@@ -221,9 +250,8 @@ impl App {
         event_queue.roundtrip(&mut state)?;
         event_queue.roundtrip(&mut state)?;
 
-        info!("Entering main event loop");
-        loop {
-            event_queue.blocking_dispatch(&mut state)?;
-        }
+        self.event_queue = Some(event_queue);
+        self.wayland_state = Some(state);
+        Ok(())
     }
 }

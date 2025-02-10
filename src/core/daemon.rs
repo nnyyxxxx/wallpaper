@@ -36,7 +36,7 @@ impl Daemon {
                     monitor: _,
                     scaling: _,
                 } => {
-                    app.set_wallpaper_and_run(image.to_str().unwrap())?;
+                    app.set_wallpaper_and_exit(image.to_str().unwrap())?;
                 }
                 IpcMessage::StopDaemon => {
                     self.running.store(false, Ordering::Relaxed);
