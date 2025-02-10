@@ -1,4 +1,3 @@
-use cairo::Error as CairoError;
 use image::ImageError;
 use thiserror::Error;
 use wayland_client::{ConnectError, DispatchError};
@@ -35,12 +34,6 @@ pub enum WallpaperError {
 
 impl From<memfd::Error> for WallpaperError {
     fn from(err: memfd::Error) -> Self {
-        Self::Memory(err.to_string())
-    }
-}
-
-impl From<CairoError> for WallpaperError {
-    fn from(err: CairoError) -> Self {
         Self::Memory(err.to_string())
     }
 }

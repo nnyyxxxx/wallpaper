@@ -14,7 +14,6 @@ use crate::{
 };
 use log::{debug, info};
 use parking_lot::RwLock;
-use rayon::prelude::*;
 use wayland_client::{Connection, EventQueue, Proxy};
 
 pub struct App {
@@ -69,46 +68,6 @@ impl App {
         self.event_queue = Some(event_queue);
         self.recreate_surfaces()?;
 
-        Ok(())
-    }
-
-    pub fn set_wallpaper(
-        &mut self,
-        path: &str,
-        event_queue: &EventQueue<WaylandState>,
-        state: &WaylandState,
-    ) -> WallpaperResult<()> {
-        info!("Setting wallpaper: {}", path);
-        let qh = &event_queue.handle();
-        let cache = &self.cache;
-
-        let buffers: Vec<_> = self
-            .monitors
-            .par_iter()
-            .map(|monitor| {
-                let cache_key = CacheKey::new(
-                    path,
-                    monitor.width.try_into().unwrap(),
-                    monitor.height.try_into().unwrap(),
-                );
-
-                if let Some(cached_buffer) = cache.get(&cache_key) {
-                    return Ok(cached_buffer.clone());
-                }
-
-                let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
-                let mut pool = BufferPool::new(monitor.width, monitor.height)?;
-                pool.write_pixels(scaled.to_rgba8().as_raw());
-                let buffer = pool.get_buffer(state.get_shm(), qh);
-                Ok::<Buffer, WallpaperError>(buffer.clone())
-            })
-            .collect::<Result<_, _>>()?;
-
-        for (surface, buffer) in self.surfaces.iter_mut().zip(buffers.iter()) {
-            surface.attach_buffer(buffer, qh);
-        }
-
-        self.current_wallpaper = RwLock::new(Some(path.to_string()));
         Ok(())
     }
 

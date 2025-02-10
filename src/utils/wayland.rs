@@ -17,6 +17,23 @@ use crate::{
 use log::{debug, info};
 use std::collections::HashMap;
 
+macro_rules! impl_empty_dispatch {
+    ($($t:ty),*) => {
+        $(
+            impl Dispatch<$t, ()> for WaylandState {
+                fn event(
+                    _: &mut Self,
+                    _: &$t,
+                    _: <$t as Proxy>::Event,
+                    _: &(),
+                    _: &Connection,
+                    _: &QueueHandle<Self>,
+                ) {}
+            }
+        )*
+    };
+}
+
 pub struct WaylandState {
     pub(crate) monitors: Vec<Monitor>,
     pub(crate) outputs: HashMap<u32, wl_output::WlOutput>,
@@ -208,54 +225,6 @@ impl Dispatch<wl_output::WlOutput, ()> for WaylandState {
     }
 }
 
-impl Dispatch<wl_shm::WlShm, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &wl_shm::WlShm,
-        _: wl_shm::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<ZwlrLayerShellV1, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &ZwlrLayerShellV1,
-        _: <ZwlrLayerShellV1 as Proxy>::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<wl_surface::WlSurface, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &wl_surface::WlSurface,
-        _: wl_surface::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<wl_shm_pool::WlShmPool, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &wl_shm_pool::WlShmPool,
-        _: wl_shm_pool::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
 impl Dispatch<wl_buffer::WlBuffer, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -321,18 +290,6 @@ impl Dispatch<ZwlrLayerSurfaceV1, ()> for WaylandState {
     }
 }
 
-impl Dispatch<wl_compositor::WlCompositor, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &wl_compositor::WlCompositor,
-        _: wl_compositor::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
 impl Dispatch<wl_callback::WlCallback, ()> for WaylandState {
     fn event(
         state: &mut Self,
@@ -351,38 +308,13 @@ impl Dispatch<wl_callback::WlCallback, ()> for WaylandState {
     }
 }
 
-impl Dispatch<wp_viewport::WpViewport, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &wp_viewport::WpViewport,
-        _: wp_viewport::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<wp_viewporter::WpViewporter, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &wp_viewporter::WpViewporter,
-        _: wp_viewporter::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
-
-impl Dispatch<wl_region::WlRegion, ()> for WaylandState {
-    fn event(
-        _: &mut Self,
-        _: &wl_region::WlRegion,
-        _: wl_region::Event,
-        _: &(),
-        _: &Connection,
-        _: &QueueHandle<Self>,
-    ) {
-    }
-}
+impl_empty_dispatch!(
+    wl_shm::WlShm,
+    ZwlrLayerShellV1,
+    wl_surface::WlSurface,
+    wl_shm_pool::WlShmPool,
+    wl_compositor::WlCompositor,
+    wp_viewport::WpViewport,
+    wp_viewporter::WpViewporter,
+    wl_region::WlRegion
+);
