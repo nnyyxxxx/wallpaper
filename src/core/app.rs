@@ -14,6 +14,8 @@ use crate::{
 };
 use log::{debug, info};
 use parking_lot::RwLock;
+use rayon::prelude::*;
+use std::sync::Arc;
 use wayland_client::{Connection, EventQueue, Proxy};
 
 pub struct App {
@@ -23,7 +25,7 @@ pub struct App {
     connection: Option<Connection>,
     surfaces: Vec<LayerSurface>,
     event_queue: Option<EventQueue<WaylandState>>,
-    cache: Cache,
+    cache: Arc<RwLock<Cache>>,
 }
 
 impl App {
@@ -35,7 +37,7 @@ impl App {
             connection: None,
             surfaces: Vec::new(),
             event_queue: None,
-            cache: Cache::new(),
+            cache: Arc::new(RwLock::new(Cache::new())),
         };
         app.init_wayland()?;
         Ok(app)
@@ -174,25 +176,21 @@ impl App {
             .take()
             .expect("Wayland state should be initialized");
         let qh = event_queue.handle();
+        let cache = Arc::clone(&self.cache);
 
         debug!("Creating buffers for {} monitors", self.monitors.len());
         let buffers: Vec<_> = self
             .monitors
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(i, monitor)| {
-                debug!(
-                    "Processing monitor {} ({} x {})",
-                    i, monitor.width, monitor.height
-                );
                 let cache_key = CacheKey::new(
                     path,
                     monitor.width.try_into().unwrap(),
                     monitor.height.try_into().unwrap(),
                 );
-                if let Some(cached_buffer) = self.cache.get(&cache_key) {
-                    debug!("Using cached buffer for monitor {}", i);
-                    return Ok(cached_buffer.clone());
+                if let Some(buffer) = cache.read().get(&cache_key) {
+                    return Ok(buffer.clone());
                 }
 
                 debug!("Creating new buffer for monitor {}", i);
@@ -205,7 +203,7 @@ impl App {
                     i,
                     buffer.buffer().id()
                 );
-                self.cache.insert(cache_key, buffer.clone());
+                cache.write().insert(cache_key, buffer.clone());
                 Ok::<Buffer, WallpaperError>(buffer)
             })
             .collect::<Result<_, _>>()?;

@@ -4,13 +4,15 @@ use crate::{
 };
 use log::debug;
 use memmap2::{MmapMut, MmapOptions};
-use std::os::fd::{AsRawFd, BorrowedFd};
+use std::{
+    os::fd::{AsRawFd, BorrowedFd},
+    time::Instant,
+};
 use wayland_client::{
     protocol::{wl_shm, wl_shm_pool::WlShmPool},
     Proxy, QueueHandle,
 };
 
-const MIN_POOL_SIZE: usize = 4096;
 const BUFFER_COUNT: usize = 2;
 
 pub struct BufferPool {
@@ -22,13 +24,15 @@ pub struct BufferPool {
     current_index: usize,
     buffers: Vec<Buffer>,
     pool: Option<WlShmPool>,
+    stride: i32,
 }
 
 impl BufferPool {
     pub fn new(width: i32, height: i32) -> WallpaperResult<Self> {
-        let min_size = (width * height * 4) as usize * BUFFER_COUNT;
-        let size = min_size.max(MIN_POOL_SIZE);
+        let stride = width * 4;
+        let size = (height * stride) as usize;
 
+        debug!("Creating buffer pool with size: {}MB", size / 1024 / 1024);
         let fd = memfd::MemfdOptions::new()
             .allow_sealing(true)
             .close_on_exec(true)
@@ -46,23 +50,17 @@ impl BufferPool {
             current_index: 0,
             buffers: Vec::with_capacity(BUFFER_COUNT),
             pool: None,
+            stride,
         })
     }
 
     pub fn write_pixels(&mut self, pixels: &[u8]) {
-        debug!(
-            "Writing pixels to buffer pool at index {}",
-            self.current_index
-        );
-        let start = self.current_index * (self.width * self.height * 4) as usize;
-        unsafe {
-            std::ptr::copy_nonoverlapping(
-                pixels.as_ptr(),
-                self.mmap[start..].as_mut_ptr(),
-                pixels.len(),
-            );
-        }
-        debug!("Pixel data written successfully");
+        let start = Instant::now();
+        debug!("Starting pixel write of {}MB", pixels.len() / 1024 / 1024);
+
+        self.mmap[..pixels.len()].copy_from_slice(pixels);
+
+        debug!("Pixel write completed in {:?}", start.elapsed());
     }
 
     pub fn get_buffer(&mut self, shm: &wl_shm::WlShm, qh: &QueueHandle<WaylandState>) -> &Buffer {
@@ -70,6 +68,7 @@ impl BufferPool {
             "Getting buffer from pool (current index: {})",
             self.current_index
         );
+
         if self.buffers.len() < BUFFER_COUNT {
             debug!("Creating new buffer in pool");
             let offset = self.current_index * (self.width * self.height * 4) as usize;
@@ -90,25 +89,28 @@ impl BufferPool {
         offset: usize,
     ) -> Buffer {
         if self.pool.is_none() {
+            let start = Instant::now();
             self.pool = Some(shm.create_pool(
                 unsafe { BorrowedFd::borrow_raw(self.fd.as_raw_fd()) },
                 self.size as i32,
                 qh,
                 (),
             ));
+            debug!("Pool creation took {:?}", start.elapsed());
         }
 
         let pool = self.pool.as_ref().unwrap();
-        let stride = self.width * 4;
+        let start = Instant::now();
         let buffer = pool.create_buffer(
             offset as i32,
             self.width,
             self.height,
-            stride,
+            self.stride,
             wl_shm::Format::Xrgb8888,
             qh,
             (),
         );
+        debug!("Buffer creation took {:?}", start.elapsed());
 
         Buffer::new(
             self.width.try_into().unwrap(),
