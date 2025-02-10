@@ -25,10 +25,11 @@ pub struct BufferPool {
 
 impl BufferPool {
     pub fn new(width: i32, height: i32) -> WallpaperResult<Self> {
-        let min_size = (width * height * 4) as usize;
+        let min_size = (width * height * 4) as usize * BUFFER_COUNT;
         let size = min_size.max(MIN_POOL_SIZE);
 
         let fd = memfd::MemfdOptions::new()
+            .allow_sealing(true)
             .close_on_exec(true)
             .create("wallpaper")?;
 
@@ -49,17 +50,14 @@ impl BufferPool {
 
     pub fn write_pixels(&mut self, pixels: &[u8]) {
         let start = self.current_index * (self.width * self.height * 4) as usize;
-        let end = start + pixels.len();
+        let dst = &mut self.mmap[start..start + pixels.len()];
 
-        let mut bgra = vec![0u8; pixels.len()];
-        for i in (0..pixels.len()).step_by(4) {
-            bgra[i] = pixels[i + 2];
-            bgra[i + 1] = pixels[i + 1];
-            bgra[i + 2] = pixels[i];
-            bgra[i + 3] = pixels[i + 3];
+        for i in 0..(pixels.len() / 4) {
+            dst[i * 4] = pixels[i * 4 + 2];
+            dst[i * 4 + 1] = pixels[i * 4 + 1];
+            dst[i * 4 + 2] = pixels[i * 4];
+            dst[i * 4 + 3] = 255;
         }
-
-        self.mmap[start..end].copy_from_slice(&bgra);
     }
 
     pub fn get_buffer(&mut self, shm: &wl_shm::WlShm, qh: &QueueHandle<WaylandState>) -> &Buffer {

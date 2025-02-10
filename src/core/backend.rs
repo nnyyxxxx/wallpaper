@@ -77,7 +77,12 @@ impl LayerSurface {
         })
     }
 
-    pub fn attach_buffer(&mut self, buffer: &Buffer, _qh: &QueueHandle<WaylandState>) {
+    pub fn attach_buffer(&mut self, buffer: &Buffer, qh: &QueueHandle<WaylandState>) {
+        if self.pending_buffer.is_some() && !buffer.is_released() {
+            return;
+        }
+
+        buffer.set_released(false);
         self.pending_buffer = Some(buffer.clone());
         self.surface.attach(Some(buffer.buffer()), 0, 0);
 
@@ -86,6 +91,8 @@ impl LayerSurface {
             viewport.set_destination(width as i32, height as i32);
         }
 
+        self.frame_callback = Some(self.surface.frame(qh, ()));
+        self.frame_done = false;
         self.surface.commit();
     }
 

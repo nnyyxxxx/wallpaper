@@ -172,11 +172,8 @@ impl App {
             .wayland_state
             .take()
             .expect("Wayland state should be initialized");
-
-        event_queue.roundtrip(&mut state)?;
-        event_queue.roundtrip(&mut state)?;
-
         let qh = event_queue.handle();
+
         let buffers: Vec<_> = self
             .monitors
             .iter()
@@ -192,8 +189,7 @@ impl App {
 
                 let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
                 let mut pool = BufferPool::new(monitor.width, monitor.height)?;
-                let rgba = scaled.to_rgba8();
-                pool.write_pixels(rgba.as_raw());
+                pool.write_pixels(scaled.to_rgba8().as_raw());
                 let buffer = pool.get_buffer(state.get_shm(), &qh).clone();
                 self.cache.insert(cache_key, buffer.clone());
                 Ok::<Buffer, WallpaperError>(buffer)
@@ -205,8 +201,6 @@ impl App {
         }
 
         self.current_wallpaper = RwLock::new(Some(path.to_string()));
-
-        event_queue.roundtrip(&mut state)?;
         event_queue.roundtrip(&mut state)?;
 
         self.event_queue = Some(event_queue);

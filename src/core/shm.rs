@@ -80,7 +80,7 @@ impl ShmBuffer {
             self.size.0 as i32,
             self.size.1 as i32,
             (self.size.0 * 4) as i32,
-            wl_shm::Format::Argb8888,
+            wl_shm::Format::Xrgb8888,
             qh,
             (),
         );
