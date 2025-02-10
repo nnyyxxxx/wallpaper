@@ -3,7 +3,7 @@ use crate::{
         backend::LayerSurface,
         buffer::Buffer,
         cache::{Cache, CacheKey},
-        pool::BumpPool,
+        pool::BufferPool,
     },
     display::monitor::Monitor,
     image::loader::ImageLoader,
@@ -79,7 +79,6 @@ impl App {
         state: &WaylandState,
     ) -> WallpaperResult<()> {
         info!("Setting wallpaper: {}", path);
-        let path = path.to_string();
         let qh = &event_queue.handle();
         let cache = &self.cache;
 
@@ -88,20 +87,20 @@ impl App {
             .par_iter()
             .map(|monitor| {
                 let cache_key = CacheKey::new(
-                    &path,
+                    path,
                     monitor.width.try_into().unwrap(),
                     monitor.height.try_into().unwrap(),
                 );
+
                 if let Some(cached_buffer) = cache.get(&cache_key) {
                     return Ok(cached_buffer.clone());
                 }
 
-                let scaled = ImageLoader::load_and_scale(&path, monitor.width, monitor.height)?;
-                let mut pool = BumpPool::new(monitor.width, monitor.height)?;
-                let rgba = scaled.to_rgba8();
-                pool.write_pixels(rgba.as_raw());
-                let buffer = pool.get_buffer(state.get_shm(), qh).clone();
-                Ok::<Buffer, WallpaperError>(buffer)
+                let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
+                let mut pool = BufferPool::new(monitor.width, monitor.height)?;
+                pool.write_pixels(scaled.to_rgba8().as_raw());
+                let buffer = pool.get_buffer(state.get_shm(), qh);
+                Ok::<Buffer, WallpaperError>(buffer.clone())
             })
             .collect::<Result<_, _>>()?;
 
@@ -109,16 +108,7 @@ impl App {
             surface.attach_buffer(buffer, qh);
         }
 
-        for (monitor, buffer) in self.monitors.iter().zip(buffers.iter()) {
-            let cache_key = CacheKey::new(
-                &path,
-                monitor.width.try_into().unwrap(),
-                monitor.height.try_into().unwrap(),
-            );
-            self.cache.insert(cache_key, buffer.clone());
-        }
-
-        self.current_wallpaper = RwLock::new(Some(path));
+        self.current_wallpaper = RwLock::new(Some(path.to_string()));
         Ok(())
     }
 
@@ -148,7 +138,7 @@ impl App {
                 .iter()
                 .map(|monitor| {
                     let scaled = ImageLoader::load_and_scale(&path, monitor.width, monitor.height)?;
-                    let mut pool = BumpPool::new(monitor.width, monitor.height)?;
+                    let mut pool = BufferPool::new(monitor.width, monitor.height)?;
                     let rgba = scaled.to_rgba8();
                     pool.write_pixels(rgba.as_raw());
                     Ok::<Buffer, WallpaperError>(pool.get_buffer(state.get_shm(), qh).clone())
@@ -242,7 +232,7 @@ impl App {
                 }
 
                 let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
-                let mut pool = BumpPool::new(monitor.width, monitor.height)?;
+                let mut pool = BufferPool::new(monitor.width, monitor.height)?;
                 let rgba = scaled.to_rgba8();
                 pool.write_pixels(rgba.as_raw());
                 let buffer = pool.get_buffer(state.get_shm(), &qh).clone();

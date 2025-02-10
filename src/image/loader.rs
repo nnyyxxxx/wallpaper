@@ -1,7 +1,8 @@
 use crate::{WallpaperError, WallpaperResult};
 use cairo::{Context, Format, ImageSurface};
-use image::{DynamicImage, GenericImageView, RgbaImage};
-use rayon::prelude::*;
+use image::{DynamicImage, GenericImageView};
+
+const BUFFER_STRIDE_ALIGN: usize = 4;
 
 pub struct ImageLoader;
 
@@ -9,63 +10,43 @@ impl ImageLoader {
     pub fn load_and_scale(path: &str, width: i32, height: i32) -> WallpaperResult<DynamicImage> {
         let img = image::open(path)?;
         let (img_width, img_height) = img.dimensions();
-        let rgba = img.to_rgba8();
 
-        let chunks_size = rgba.len() / rayon::current_num_threads();
-        let mut pixel_data = vec![0u8; (width * height * 4) as usize];
+        let stride = ((width * 4) as usize + BUFFER_STRIDE_ALIGN - 1) & !(BUFFER_STRIDE_ALIGN - 1);
+        let mut pixel_data = vec![0u8; stride * height as usize];
 
         let surface = unsafe {
             ImageSurface::create_for_data_unsafe(
                 pixel_data.as_mut_ptr(),
-                Format::ARgb32,
+                Format::Rgb24,
                 width,
                 height,
-                width * 4,
+                stride as i32,
             )
         }
         .map_err(|e| WallpaperError::Memory(e.to_string()))?;
 
-        let ctx = Context::new(&surface).map_err(|e| WallpaperError::Memory(e.to_string()))?;
-
+        let ctx = Context::new(&surface)?;
         let scale_x = width as f64 / img_width as f64;
         let scale_y = height as f64 / img_height as f64;
         let scale = scale_x.max(scale_y);
 
         ctx.scale(scale, scale);
 
-        let bgra: Vec<u8> = rgba
-            .par_chunks(chunks_size)
-            .flat_map(|chunk| {
-                chunk
-                    .par_chunks_exact(4)
-                    .map(|p| [p[2], p[1], p[0], p[3]])
-                    .flatten()
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-
+        let rgba = img.to_rgba8();
         let source_surface = ImageSurface::create_for_data(
-            bgra,
-            Format::ARgb32,
+            rgba.as_raw().to_vec(),
+            Format::Rgb24,
             img_width as i32,
             img_height as i32,
-            img_width as i32 * 4,
-        )
-        .map_err(|e| WallpaperError::Memory(e.to_string()))?;
+            (img_width * 4) as i32,
+        )?;
 
-        ctx.set_source_surface(&source_surface, 0.0, 0.0)
-            .map_err(|e| WallpaperError::Memory(e.to_string()))?;
-
-        ctx.paint()
-            .map_err(|e| WallpaperError::Memory(e.to_string()))?;
-
-        drop(ctx);
-        drop(surface);
+        ctx.set_source_surface(&source_surface, 0.0, 0.0)?;
+        ctx.paint()?;
 
         Ok(DynamicImage::ImageRgba8(
-            RgbaImage::from_raw(width as u32, height as u32, pixel_data).ok_or_else(|| {
-                WallpaperError::Memory("Failed to create image from raw pixels".into())
-            })?,
+            image::RgbaImage::from_raw(width as u32, height as u32, pixel_data)
+                .ok_or_else(|| WallpaperError::Memory("Failed to create image".into()))?,
         ))
     }
 }
