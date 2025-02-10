@@ -410,6 +410,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "fast_image_resize"
+version = "3.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9d450fac8a334ad72825596173f0f7767ff04dd6e3d59c49c894c4bc2957e8b"
+dependencies = [
+ "cfg-if",
+ "num-traits",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "fdeflate"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1334,10 +1345,12 @@ dependencies = [
  "bincode",
  "clap",
  "env_logger",
+ "fast_image_resize",
  "image",
  "log",
  "memfd",
  "memmap2",
+ "rayon",
  "serde",
  "thiserror 2.0.11",
  "tokio",

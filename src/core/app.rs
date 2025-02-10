@@ -13,6 +13,7 @@ use crate::{
     },
 };
 use log::{debug, info};
+use rayon::prelude::*;
 use std::cell::RefCell;
 use wayland_client::{Connection, EventQueue, Proxy};
 
@@ -80,17 +81,18 @@ impl App {
         info!("Setting wallpaper: {}", path);
         let path = path.to_string();
         let qh = &event_queue.handle();
+        let cache = &self.cache;
 
         let buffers: Vec<_> = self
             .monitors
-            .iter()
+            .par_iter()
             .map(|monitor| {
                 let cache_key = CacheKey::new(
                     &path,
                     monitor.width.try_into().unwrap(),
                     monitor.height.try_into().unwrap(),
                 );
-                if let Some(cached_buffer) = self.cache.get(&cache_key) {
+                if let Some(cached_buffer) = cache.get(&cache_key) {
                     return Ok(cached_buffer.clone());
                 }
 
@@ -99,13 +101,21 @@ impl App {
                 let rgba = scaled.to_rgba8();
                 pool.write_pixels(rgba.as_raw());
                 let buffer = pool.get_buffer(state.get_shm(), qh).clone();
-                self.cache.insert(cache_key, buffer.clone());
                 Ok::<Buffer, WallpaperError>(buffer)
             })
             .collect::<Result<_, _>>()?;
 
         for (surface, buffer) in self.surfaces.iter_mut().zip(buffers.iter()) {
             surface.attach_buffer(buffer, qh);
+        }
+
+        for (monitor, buffer) in self.monitors.iter().zip(buffers.iter()) {
+            let cache_key = CacheKey::new(
+                &path,
+                monitor.width.try_into().unwrap(),
+                monitor.height.try_into().unwrap(),
+            );
+            self.cache.insert(cache_key, buffer.clone());
         }
 
         self.current_wallpaper = RefCell::new(Some(path));
