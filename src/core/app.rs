@@ -13,13 +13,13 @@ use crate::{
     },
 };
 use log::{debug, info};
+use parking_lot::RwLock;
 use rayon::prelude::*;
-use std::cell::RefCell;
 use wayland_client::{Connection, EventQueue, Proxy};
 
 pub struct App {
     monitors: Vec<Monitor>,
-    current_wallpaper: RefCell<Option<String>>,
+    current_wallpaper: RwLock<Option<String>>,
     wayland_state: Option<WaylandState>,
     connection: Option<Connection>,
     surfaces: Vec<LayerSurface>,
@@ -31,7 +31,7 @@ impl App {
     pub fn new() -> WallpaperResult<Self> {
         let mut app = Self {
             monitors: Vec::new(),
-            current_wallpaper: RefCell::new(None),
+            current_wallpaper: RwLock::new(None),
             wayland_state: None,
             connection: None,
             surfaces: Vec::new(),
@@ -118,7 +118,7 @@ impl App {
             self.cache.insert(cache_key, buffer.clone());
         }
 
-        self.current_wallpaper = RefCell::new(Some(path));
+        self.current_wallpaper = RwLock::new(Some(path));
         Ok(())
     }
 
@@ -137,7 +137,7 @@ impl App {
         event_queue.roundtrip(&mut state)?;
         event_queue.roundtrip(&mut state)?;
 
-        let current_path = self.current_wallpaper.borrow().clone();
+        let current_path = self.current_wallpaper.read().clone();
 
         if let Some(path) = current_path {
             debug!("Setting initial wallpaper");
@@ -255,7 +255,7 @@ impl App {
             surface.attach_buffer(buffer, &qh);
         }
 
-        self.current_wallpaper = RefCell::new(Some(path.to_string()));
+        self.current_wallpaper = RwLock::new(Some(path.to_string()));
 
         event_queue.roundtrip(&mut state)?;
         event_queue.roundtrip(&mut state)?;

@@ -2,11 +2,11 @@ use crate::{
     core::ipc::{IpcMessage, IpcServer},
     App, WallpaperResult,
 };
+use parking_lot::Mutex;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-use tokio::sync::Mutex;
 
 pub struct Daemon {
     running: Arc<AtomicBool>,
@@ -28,7 +28,7 @@ impl Daemon {
     pub async fn run(&self) -> WallpaperResult<()> {
         while self.running.load(Ordering::Relaxed) {
             let (_, msg) = self.server.accept().await?;
-            let mut app = self.app.lock().await;
+            let mut app = self.app.lock();
 
             match msg {
                 IpcMessage::SetWallpaper {

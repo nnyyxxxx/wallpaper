@@ -1350,6 +1350,7 @@ dependencies = [
  "log",
  "memfd",
  "memmap2",
+ "parking_lot",
  "rayon",
  "serde",
  "thiserror 2.0.11",

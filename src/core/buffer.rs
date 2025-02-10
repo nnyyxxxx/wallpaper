@@ -35,7 +35,7 @@ impl Buffer {
     }
 
     pub fn set_released(&self, released: bool) {
-        self.released.store(released, Ordering::SeqCst);
+        self.released.store(released, Ordering::SeqCst)
     }
 
     pub fn is_released(&self) -> bool {
