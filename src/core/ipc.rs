@@ -24,9 +24,20 @@ pub struct IpcServer {
 
 impl IpcServer {
     pub async fn new() -> WallpaperResult<Self> {
-        let _ = tokio::fs::remove_file(SOCKET_PATH).await;
-        let listener = UnixListener::bind(SOCKET_PATH)?;
-        Ok(Self { listener })
+        match UnixListener::bind(SOCKET_PATH) {
+            Ok(listener) => Ok(Self { listener }),
+            Err(_) => {
+                if let Ok(mut stream) = UnixStream::connect(SOCKET_PATH).await {
+                    let msg = IpcMessage::StopDaemon;
+                    let data = bincode::serialize(&msg)?;
+                    stream.write_all(&data).await?;
+                }
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                let _ = tokio::fs::remove_file(SOCKET_PATH).await;
+                let listener = UnixListener::bind(SOCKET_PATH)?;
+                Ok(Self { listener })
+            }
+        }
     }
 
     pub async fn accept(&self) -> WallpaperResult<(UnixStream, IpcMessage)> {
