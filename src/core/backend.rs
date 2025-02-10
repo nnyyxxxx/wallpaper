@@ -78,21 +78,35 @@ impl LayerSurface {
     }
 
     pub fn attach_buffer(&mut self, buffer: &Buffer, qh: &QueueHandle<WaylandState>) {
-        if self.pending_buffer.is_some() && !buffer.is_released() {
+        debug!("Attempting to attach buffer {:?}", buffer.buffer().id());
+
+        if !buffer.is_released() && buffer.release_count() < 2 {
+            debug!(
+                "Buffer not ready for attachment - released: {}, count: {}",
+                buffer.is_released(),
+                buffer.release_count()
+            );
             return;
         }
 
+        debug!("Buffer ready for attachment");
         buffer.set_released(false);
         self.pending_buffer = Some(buffer.clone());
         self.surface.attach(Some(buffer.buffer()), 0, 0);
 
         if let Some(viewport) = &self.viewport {
             let (width, height) = buffer.size();
+            debug!("Setting viewport destination: {}x{}", width, height);
             viewport.set_destination(width as i32, height as i32);
         }
 
-        self.frame_callback = Some(self.surface.frame(qh, ()));
-        self.frame_done = false;
+        if self.frame_done {
+            debug!("Requesting new frame callback");
+            self.frame_callback = Some(self.surface.frame(qh, ()));
+            self.frame_done = false;
+        }
+
+        debug!("Committing surface");
         self.surface.commit();
     }
 

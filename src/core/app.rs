@@ -163,6 +163,7 @@ impl App {
 
     pub fn set_wallpaper_and_exit(&mut self, path: &str) -> WallpaperResult<()> {
         info!("Setting wallpaper: {}", path);
+        debug!("Starting wallpaper setting process");
 
         let mut event_queue = self
             .event_queue
@@ -174,35 +175,58 @@ impl App {
             .expect("Wayland state should be initialized");
         let qh = event_queue.handle();
 
+        debug!("Creating buffers for {} monitors", self.monitors.len());
         let buffers: Vec<_> = self
             .monitors
             .iter()
-            .map(|monitor| {
+            .enumerate()
+            .map(|(i, monitor)| {
+                debug!(
+                    "Processing monitor {} ({} x {})",
+                    i, monitor.width, monitor.height
+                );
                 let cache_key = CacheKey::new(
                     path,
                     monitor.width.try_into().unwrap(),
                     monitor.height.try_into().unwrap(),
                 );
                 if let Some(cached_buffer) = self.cache.get(&cache_key) {
+                    debug!("Using cached buffer for monitor {}", i);
                     return Ok(cached_buffer.clone());
                 }
 
+                debug!("Creating new buffer for monitor {}", i);
                 let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
                 let mut pool = BufferPool::new(monitor.width, monitor.height)?;
                 pool.write_pixels(scaled.to_rgba8().as_raw());
                 let buffer = pool.get_buffer(state.get_shm(), &qh).clone();
+                debug!(
+                    "Buffer created for monitor {}: {:?}",
+                    i,
+                    buffer.buffer().id()
+                );
                 self.cache.insert(cache_key, buffer.clone());
                 Ok::<Buffer, WallpaperError>(buffer)
             })
             .collect::<Result<_, _>>()?;
 
-        for (surface, buffer) in self.surfaces.iter_mut().zip(buffers.iter()) {
+        debug!("Attaching buffers to surfaces");
+        for (i, (surface, buffer)) in self.surfaces.iter_mut().zip(buffers.iter()).enumerate() {
+            debug!(
+                "Attaching buffer {:?} to surface {}",
+                buffer.buffer().id(),
+                i
+            );
             surface.attach_buffer(buffer, &qh);
         }
 
+        debug!("Setting current wallpaper path");
         self.current_wallpaper = RwLock::new(Some(path.to_string()));
+
+        debug!("Performing roundtrip");
         event_queue.roundtrip(&mut state)?;
 
+        debug!("Wallpaper setting process completed");
         self.event_queue = Some(event_queue);
         self.wayland_state = Some(state);
         Ok(())
