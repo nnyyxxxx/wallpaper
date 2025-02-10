@@ -1,8 +1,7 @@
 use crate::{WallpaperError, WallpaperResult};
-use fast_image_resize::{Image as ResizeImage, PixelType, ResizeAlg, Resizer};
+use cairo::{Context, Format, ImageSurface};
 use image::{DynamicImage, GenericImageView};
 use rayon::prelude::*;
-use std::num::NonZeroU32;
 
 pub struct ImageLoader;
 
@@ -11,39 +10,58 @@ impl ImageLoader {
         let img = image::open(path)?;
         let (img_width, img_height) = img.dimensions();
 
+        let mut pixel_data = vec![0u8; (width * height * 4) as usize];
+
+        let surface = unsafe {
+            ImageSurface::create_for_data_unsafe(
+                pixel_data.as_mut_ptr(),
+                Format::ARgb32,
+                width,
+                height,
+                width * 4,
+            )
+        }
+        .map_err(|e| WallpaperError::Memory(e.to_string()))?;
+
+        let ctx = Context::new(&surface).map_err(|e| WallpaperError::Memory(e.to_string()))?;
+
+        let scale_x = width as f64 / img_width as f64;
+        let scale_y = height as f64 / img_height as f64;
+        let scale = scale_x.max(scale_y);
+
+        ctx.scale(scale, scale);
+
         let rgba = img.to_rgba8();
-        let src = ResizeImage::from_vec_u8(
-            NonZeroU32::new(img_width).unwrap(),
-            NonZeroU32::new(img_height).unwrap(),
-            rgba.into_raw(),
-            PixelType::U8x4,
-        )
-        .unwrap();
-
-        let mut dst = ResizeImage::new(
-            NonZeroU32::new(width as u32).unwrap(),
-            NonZeroU32::new(height as u32).unwrap(),
-            PixelType::U8x4,
-        );
-
-        let mut resizer = Resizer::new(ResizeAlg::Convolution(
-            fast_image_resize::FilterType::Lanczos3,
-        ));
-        resizer
-            .resize(&src.view(), &mut dst.view_mut())
-            .map_err(|e| WallpaperError::Memory(e.to_string()))?;
-
-        let mut pixels = dst.into_vec();
-
-        pixels.par_chunks_exact_mut(4).for_each(|chunk| {
+        let mut bgra = rgba.to_vec();
+        bgra.par_chunks_exact_mut(4).for_each(|chunk| {
             let r = chunk[0];
             let b = chunk[2];
             chunk[0] = b;
             chunk[2] = r;
         });
 
+        let source_surface = ImageSurface::create_for_data(
+            bgra,
+            Format::ARgb32,
+            img_width as i32,
+            img_height as i32,
+            img_width as i32 * 4,
+        )
+        .map_err(|e| WallpaperError::Memory(e.to_string()))?;
+
+        ctx.set_source_surface(&source_surface, 0.0, 0.0)
+            .map_err(|e| WallpaperError::Memory(e.to_string()))?;
+
+        ctx.paint()
+            .map_err(|e| WallpaperError::Memory(e.to_string()))?;
+
+        drop(ctx);
+        drop(surface);
+
         Ok(DynamicImage::ImageRgba8(
-            image::RgbaImage::from_raw(width as u32, height as u32, pixels).unwrap(),
+            image::RgbaImage::from_raw(width as u32, height as u32, pixel_data).ok_or_else(
+                || WallpaperError::Memory("Failed to create image from raw pixels".into()),
+            )?,
         ))
     }
 }
