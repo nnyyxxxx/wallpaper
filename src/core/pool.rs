@@ -71,7 +71,7 @@ impl BumpPool {
 
         let pool = shm.create_pool(
             unsafe { BorrowedFd::borrow_raw(fd.as_raw_fd()) },
-            (self.width * self.height * 4) as i32,
+            self.width * self.height * 4,
             qh,
             (),
         );
@@ -97,7 +97,7 @@ impl BumpPool {
             let b = chunk[2];
             let a = chunk[3];
 
-            let idx = (chunk.as_ptr() as usize - pixels.as_ptr() as usize) as usize;
+            let idx = chunk.as_ptr() as usize - pixels.as_ptr() as usize;
             self.mmap[idx..idx + 4].copy_from_slice(&[b, g, r, a]);
         }
     }

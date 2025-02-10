@@ -79,7 +79,7 @@ impl LayerSurface {
 
     pub fn attach_buffer(&mut self, buffer: &Buffer, _qh: &QueueHandle<WaylandState>) {
         self.pending_buffer = Some(buffer.clone());
-        self.surface.attach(Some(&buffer.buffer()), 0, 0);
+        self.surface.attach(Some(buffer.buffer()), 0, 0);
 
         if let Some(viewport) = &self.viewport {
             let (width, height) = buffer.size();

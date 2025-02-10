@@ -79,9 +79,9 @@ impl App {
             .iter()
             .map(|monitor| {
                 let scaled = ImageLoader::load_and_scale(&path, monitor.width, monitor.height)?;
-                let mut pool = BumpPool::new(monitor.width as i32, monitor.height as i32)?;
+                let mut pool = BumpPool::new(monitor.width, monitor.height)?;
                 let rgba = scaled.to_rgba8();
-                pool.write_pixels(&rgba.as_raw());
+                pool.write_pixels(rgba.as_raw());
                 Ok::<Buffer, WallpaperError>(pool.get_buffer(state.get_shm(), qh).clone())
             })
             .collect::<Result<_, _>>()?;
@@ -120,9 +120,9 @@ impl App {
                 .iter()
                 .map(|monitor| {
                     let scaled = ImageLoader::load_and_scale(&path, monitor.width, monitor.height)?;
-                    let mut pool = BumpPool::new(monitor.width as i32, monitor.height as i32)?;
+                    let mut pool = BumpPool::new(monitor.width, monitor.height)?;
                     let rgba = scaled.to_rgba8();
-                    pool.write_pixels(&rgba.as_raw());
+                    pool.write_pixels(rgba.as_raw());
                     Ok::<Buffer, WallpaperError>(pool.get_buffer(state.get_shm(), qh).clone())
                 })
                 .collect::<Result<_, _>>()?;
@@ -207,7 +207,7 @@ impl App {
                 let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
                 let mut pool = BumpPool::new(monitor.width, monitor.height)?;
                 let rgba = scaled.to_rgba8();
-                pool.write_pixels(&rgba.as_raw());
+                pool.write_pixels(rgba.as_raw());
                 Ok::<Buffer, WallpaperError>(pool.get_buffer(state.get_shm(), &qh).clone())
             })
             .collect::<Result<_, _>>()?;
