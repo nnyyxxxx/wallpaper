@@ -58,7 +58,13 @@ impl BufferPool {
         let start = Instant::now();
         debug!("Starting pixel write of {}MB", pixels.len() / 1024 / 1024);
 
-        self.mmap[..pixels.len()].copy_from_slice(pixels);
+        let dst = &mut self.mmap[..pixels.len()];
+        for i in 0..(pixels.len() / 4) {
+            dst[i * 4] = pixels[i * 4 + 2];
+            dst[i * 4 + 1] = pixels[i * 4 + 1];
+            dst[i * 4 + 2] = pixels[i * 4];
+            dst[i * 4 + 3] = 255;
+        }
 
         debug!("Pixel write completed in {:?}", start.elapsed());
     }
