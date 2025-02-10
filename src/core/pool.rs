@@ -5,6 +5,7 @@ use crate::{
 use log::debug;
 use memmap2::{MmapMut, MmapOptions};
 use std::{
+    arch::x86_64::{__m128i, _mm_set_epi8},
     os::fd::{AsRawFd, BorrowedFd},
     time::Instant,
 };
@@ -14,6 +15,7 @@ use wayland_client::{
 };
 
 const BUFFER_COUNT: usize = 2;
+const BUFFER_SIZE: usize = 32 * 1024 * 1024;
 
 pub struct BufferPool {
     mmap: MmapMut,
@@ -38,8 +40,8 @@ impl BufferPool {
             .close_on_exec(true)
             .create("wallpaper")?;
 
-        fd.as_file().set_len(size as u64)?;
-        let mmap = unsafe { MmapOptions::new().len(size).map_mut(&fd)? };
+        fd.as_file().set_len(BUFFER_SIZE as u64)?;
+        let mmap = unsafe { MmapOptions::new().len(BUFFER_SIZE).map_mut(&fd)? };
 
         Ok(Self {
             mmap,
@@ -58,12 +60,17 @@ impl BufferPool {
         let start = Instant::now();
         debug!("Starting pixel write of {}MB", pixels.len() / 1024 / 1024);
 
-        let dst = &mut self.mmap[..pixels.len()];
-        for i in 0..(pixels.len() / 4) {
-            dst[i * 4] = pixels[i * 4 + 2];
-            dst[i * 4 + 1] = pixels[i * 4 + 1];
-            dst[i * 4 + 2] = pixels[i * 4];
-            dst[i * 4 + 3] = 255;
+        unsafe {
+            use std::arch::x86_64::{_mm_load_si128, _mm_shuffle_epi8, _mm_store_si128};
+            let src = pixels.as_ptr() as *const __m128i;
+            let dst = self.mmap.as_mut_ptr() as *mut __m128i;
+            let shuffle_mask = _mm_set_epi8(15, 12, 13, 14, 11, 8, 9, 10, 7, 4, 5, 6, 3, 0, 1, 2);
+
+            for i in 0..(pixels.len() / 16) {
+                let pixel_data = _mm_load_si128(src.add(i));
+                let converted = _mm_shuffle_epi8(pixel_data, shuffle_mask);
+                _mm_store_si128(dst.add(i), converted);
+            }
         }
 
         debug!("Pixel write completed in {:?}", start.elapsed());

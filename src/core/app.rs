@@ -94,14 +94,21 @@ impl App {
             debug!("Setting initial wallpaper");
             let qh = &event_queue.handle();
 
+            let img = ImageLoader::preload(&path)?;
             let buffers: Vec<_> = self
                 .monitors
                 .iter()
-                .map(|monitor| {
-                    let scaled = ImageLoader::load_and_scale(&path, monitor.width, monitor.height)?;
+                .enumerate()
+                .par_bridge()
+                .map(|(i, monitor)| {
+                    debug!("Creating new buffer for monitor {}", i);
+                    let scaled = ImageLoader::scale_image(
+                        &img,
+                        monitor.width as u32,
+                        monitor.height as u32,
+                    )?;
                     let mut pool = BufferPool::new(monitor.width, monitor.height)?;
-                    let rgba = scaled.to_rgba8();
-                    pool.write_pixels(rgba.as_raw());
+                    pool.write_pixels(scaled.to_rgba8().as_raw());
                     Ok::<Buffer, WallpaperError>(pool.get_buffer(state.get_shm(), qh).clone())
                 })
                 .collect::<Result<_, _>>()?;
@@ -119,7 +126,6 @@ impl App {
 
     fn recreate_surfaces(&mut self) -> WallpaperResult<()> {
         self.surfaces.clear();
-
         let state = self
             .wayland_state
             .as_mut()
@@ -134,24 +140,28 @@ impl App {
             .as_ref()
             .expect("Connection should be initialized");
 
-        for monitor in &self.monitors {
-            let surface = LayerSurface::new(
-                conn,
-                &qh,
-                monitor,
-                state.get_layer_shell(),
-                state.get_compositor(),
-                Some(state.get_viewporter()),
-            )?;
+        let new_surfaces = self
+            .monitors
+            .iter()
+            .map(|monitor| {
+                LayerSurface::new(
+                    conn,
+                    &qh,
+                    monitor,
+                    state.get_layer_shell(),
+                    state.get_compositor(),
+                    Some(state.get_viewporter()),
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
+        for surface in &new_surfaces {
             debug!("Created layer surface with id: {:?}", surface.layer().id());
             state.add_layer_surface(surface.layer().id().protocol_id(), surface.clone());
-            self.surfaces.push(surface);
         }
 
-        event_queue.roundtrip(state)?;
-
-        for _ in 0..10 {
+        const MAX_CONFIGURE_ATTEMPTS: u8 = 10;
+        for _ in 0..MAX_CONFIGURE_ATTEMPTS {
             event_queue.roundtrip(state)?;
             if state.all_surfaces_configured() {
                 debug!("All surfaces configured");
@@ -159,6 +169,7 @@ impl App {
             }
         }
 
+        self.surfaces = new_surfaces;
         self.event_queue = Some(event_queue);
         Ok(())
     }
@@ -179,52 +190,49 @@ impl App {
         let cache = Arc::clone(&self.cache);
 
         debug!("Creating buffers for {} monitors", self.monitors.len());
+        let img = ImageLoader::preload(path)?;
+
         let buffers: Vec<_> = self
             .monitors
-            .par_iter()
+            .iter()
             .enumerate()
+            .par_bridge()
             .map(|(i, monitor)| {
                 let cache_key = CacheKey::new(
                     path,
                     monitor.width.try_into().unwrap(),
                     monitor.height.try_into().unwrap(),
                 );
+
                 if let Some(buffer) = cache.read().get(&cache_key) {
                     return Ok(buffer.clone());
                 }
 
                 debug!("Creating new buffer for monitor {}", i);
-                let scaled = ImageLoader::load_and_scale(path, monitor.width, monitor.height)?;
+                let scaled =
+                    ImageLoader::scale_image(&img, monitor.width as u32, monitor.height as u32)?;
                 let mut pool = BufferPool::new(monitor.width, monitor.height)?;
                 pool.write_pixels(scaled.to_rgba8().as_raw());
                 let buffer = pool.get_buffer(state.get_shm(), &qh).clone();
-                debug!(
-                    "Buffer created for monitor {}: {:?}",
-                    i,
-                    buffer.buffer().id()
-                );
+
                 cache.write().insert(cache_key, buffer.clone());
                 Ok::<Buffer, WallpaperError>(buffer)
             })
             .collect::<Result<_, _>>()?;
 
         debug!("Attaching buffers to surfaces");
-        for (i, (surface, buffer)) in self.surfaces.iter_mut().zip(buffers.iter()).enumerate() {
+        for (i, (surface, buffer)) in self.surfaces.iter_mut().zip(buffers).enumerate() {
             debug!(
                 "Attaching buffer {:?} to surface {}",
                 buffer.buffer().id(),
                 i
             );
-            surface.attach_buffer(buffer, &qh);
+            surface.attach_buffer(&buffer, &qh);
         }
 
-        debug!("Setting current wallpaper path");
         self.current_wallpaper = RwLock::new(Some(path.to_string()));
-
-        debug!("Performing roundtrip");
         event_queue.roundtrip(&mut state)?;
 
-        debug!("Wallpaper setting process completed");
         self.event_queue = Some(event_queue);
         self.wayland_state = Some(state);
         Ok(())
