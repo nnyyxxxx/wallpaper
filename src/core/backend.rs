@@ -58,6 +58,8 @@ impl LayerSurface {
         );
         layer.set_exclusive_zone(-1);
         layer.set_keyboard_interactivity(zwlr_layer_surface_v1::KeyboardInteractivity::None);
+        let region = compositor.create_region(qh, ());
+        surface.set_input_region(Some(&region));
         surface.set_buffer_scale(1);
 
         let frame_callback = Some(surface.frame(qh, ()));

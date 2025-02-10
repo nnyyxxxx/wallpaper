@@ -1,7 +1,7 @@
 use wayland_client::{
     protocol::{
-        wl_buffer, wl_callback, wl_compositor, wl_output, wl_registry, wl_shm, wl_shm_pool,
-        wl_surface,
+        wl_buffer, wl_callback, wl_compositor, wl_output, wl_region, wl_registry, wl_shm,
+        wl_shm_pool, wl_surface,
     },
     Connection, Dispatch, Proxy, QueueHandle,
 };
@@ -368,6 +368,18 @@ impl Dispatch<wp_viewporter::WpViewporter, ()> for WaylandState {
         _: &mut Self,
         _: &wp_viewporter::WpViewporter,
         _: wp_viewporter::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<wl_region::WlRegion, ()> for WaylandState {
+    fn event(
+        _: &mut Self,
+        _: &wl_region::WlRegion,
+        _: wl_region::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
