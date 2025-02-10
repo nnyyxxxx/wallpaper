@@ -31,11 +31,7 @@ impl Daemon {
             let mut app = self.app.lock();
 
             match msg {
-                IpcMessage::SetWallpaper {
-                    image,
-                    monitor: _,
-                    scaling: _,
-                } => {
+                IpcMessage::SetWallpaper { image, monitor: _ } => {
                     app.set_wallpaper_and_exit(image.to_str().unwrap())?;
                 }
                 IpcMessage::StopDaemon => {

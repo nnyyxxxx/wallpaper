@@ -19,10 +19,6 @@ pub enum Command {
         /// Monitor to set wallpaper on (default: all)
         #[arg(short, long)]
         monitor: Option<String>,
-
-        /// Scaling mode (fill, fit, stretch)
-        #[arg(short, long, default_value = "fill")]
-        scaling: String,
     },
 
     #[command(name = "daemon")]

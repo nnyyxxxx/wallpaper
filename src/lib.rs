@@ -21,7 +21,6 @@ pub mod display {
 
 pub mod image {
     pub mod loader;
-    pub mod transform;
 }
 
 pub use core::{app::App, daemon::Daemon};

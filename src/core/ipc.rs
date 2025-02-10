@@ -13,7 +13,6 @@ pub enum IpcMessage {
     SetWallpaper {
         image: PathBuf,
         monitor: Option<String>,
-        scaling: String,
     },
     StopDaemon,
 }
