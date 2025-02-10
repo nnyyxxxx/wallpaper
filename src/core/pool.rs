@@ -91,6 +91,14 @@ impl BumpPool {
     }
 
     pub fn write_pixels(&mut self, pixels: &[u8]) {
-        self.mmap[..pixels.len()].copy_from_slice(pixels);
+        for chunk in pixels.chunks_exact(4) {
+            let r = chunk[0];
+            let g = chunk[1];
+            let b = chunk[2];
+            let a = chunk[3];
+
+            let idx = (chunk.as_ptr() as usize - pixels.as_ptr() as usize) as usize;
+            self.mmap[idx..idx + 4].copy_from_slice(&[b, g, r, a]);
+        }
     }
 }
