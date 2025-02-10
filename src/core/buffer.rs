@@ -41,4 +41,8 @@ impl Buffer {
     pub fn is_released(&self) -> bool {
         self.released.load(Ordering::SeqCst)
     }
+
+    pub fn size(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
 }

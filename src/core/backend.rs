@@ -78,6 +78,12 @@ impl LayerSurface {
     pub fn attach_buffer(&mut self, buffer: &Buffer, _qh: &QueueHandle<WaylandState>) {
         self.pending_buffer = Some(buffer.clone());
         self.surface.attach(Some(&buffer.buffer()), 0, 0);
+
+        if let Some(viewport) = &self.viewport {
+            let (width, height) = buffer.size();
+            viewport.set_destination(width as i32, height as i32);
+        }
+
         self.surface.commit();
     }
 
@@ -104,25 +110,13 @@ impl LayerSurface {
 
     pub fn handle_frame(
         &mut self,
-        callback: &wl_callback::WlCallback,
+        _callback: &wl_callback::WlCallback,
         qh: &QueueHandle<WaylandState>,
     ) {
-        if self
-            .frame_callback
-            .as_ref()
-            .map(|c| c == callback)
-            .unwrap_or(false)
-        {
-            self.frame_callback = None;
-            self.frame_done = true;
-
-            if let Some(viewport) = &self.viewport {
-                if let Some(buffer) = &self.pending_buffer {
-                    viewport.set_destination(buffer.width() as i32, buffer.height() as i32);
-                }
-            }
-
+        self.frame_done = true;
+        if self.pending_buffer.is_some() {
             self.frame_callback = Some(self.surface.frame(qh, ()));
+            self.frame_done = false;
             self.surface.commit();
         }
     }
@@ -141,5 +135,9 @@ impl LayerSurface {
 
     pub fn take_pending_buffer(&mut self) -> Option<Buffer> {
         self.pending_buffer.take()
+    }
+
+    pub fn needs_redraw(&self) -> bool {
+        self.pending_buffer.is_some() && self.frame_done
     }
 }

@@ -344,7 +344,7 @@ impl Dispatch<wl_callback::WlCallback, ()> for WaylandState {
     ) {
         if let wl_callback::Event::Done { callback_data: _ } = event {
             debug!("Frame callback completed: {:?}", callback.id());
-            for surface in state.layer_surfaces.values_mut() {
+            if let Some(surface) = state.layer_surfaces.values_mut().find(|s| s.needs_redraw()) {
                 surface.handle_frame(callback, qh);
             }
         }
