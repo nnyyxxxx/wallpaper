@@ -10,6 +10,7 @@ use wallpaper::{
 
 #[tokio::main]
 async fn main() -> WallpaperResult<()> {
+    env_logger::init();
     let cli = Cli::parse();
 
     match cli.command {
